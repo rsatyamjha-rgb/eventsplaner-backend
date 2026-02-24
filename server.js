@@ -8,7 +8,6 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
-const Razorpay = require('razorpay');
 const crypto = require('crypto');
 require('dotenv').config();
 
@@ -21,11 +20,8 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✅ MongoDB Connected'))
   .catch(err => console.log('❌ MongoDB Error:', err));
 
-// ── Razorpay Setup ──
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
-});
+// ── Razorpay Setup (baad mein add karenge) ──
+// const razorpay = new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID, key_secret: process.env.RAZORPAY_KEY_SECRET });
 
 // ═══════════════
 //  MODELS
@@ -202,17 +198,8 @@ app.post('/api/planners/register', async (req, res) => {
       plan, subscriptionStatus: 'pending'
     });
 
-    // Razorpay order banao
-    const amounts = { basic: 49900, professional: 99900, premium: 199900 };
-    const order = await razorpay.orders.create({
-      amount: amounts[plan],
-      currency: 'INR',
-      receipt: `planner_${planner._id}`,
-      notes: { plannerId: planner._id.toString(), plan }
-    });
-
     const token = jwt.sign({ id: user._id, role: 'planner' }, process.env.JWT_SECRET, { expiresIn: '30d' });
-    res.json({ order, plannerId: planner._id, token, key: process.env.RAZORPAY_KEY_ID });
+    res.json({ message: 'Registration successful! Payment coming soon.', plannerId: planner._id, token });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
