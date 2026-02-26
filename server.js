@@ -57,6 +57,7 @@ const plannerSchema = new mongoose.Schema({
   rating: { type: Number, default: 0 },
   totalReviews: { type: Number, default: 0 },
   plan: { type: String, enum: ['basic', 'professional', 'premium'], default: 'basic' },
+  photo: String,
   subscriptionStatus: { type: String, enum: ['active', 'expired', 'pending'], default: 'pending' },
   subscriptionExpiry: Date,
   isVerified: { type: Boolean, default: false },
@@ -204,15 +205,20 @@ app.post('/api/planners/register', async (req, res) => {
 
     const token = jwt.sign({ id: user._id, role: 'planner' }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
-    // Razorpay order banao
-    const amounts = { basic: 49900, professional: 99900, premium: 199900 };
+    // Basic plan FREE hai - no payment needed
+    if (plan === 'basic' || !plan) {
+      await Planner.findByIdAndUpdate(planner._id, { subscriptionStatus: 'active' });
+      return res.json({ message: 'Registration successful! Welcome to EventsPlaner.com', plannerId: planner._id, token, free: true });
+    }
+
+    // Pro/Premium - Razorpay order banao
+    const amounts = { professional: 49900, premium: 99900 };
     const order = await razorpay.orders.create({
-      amount: amounts[plan] || 99900,
+      amount: amounts[plan] || 49900,
       currency: 'INR',
       receipt: `planner_${planner._id}`,
       notes: { plannerId: planner._id.toString(), plan }
     });
-
     res.json({ order, plannerId: planner._id, token, key: process.env.RAZORPAY_KEY_ID });
   } catch (err) {
     res.status(500).json({ error: err.message });
