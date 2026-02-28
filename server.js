@@ -187,10 +187,14 @@ app.get('/api/planners/:id', async (req, res) => {
 // Register Planner (creates order for payment)
 app.post('/api/planners/register', async (req, res) => {
   try {
-    const { name, businessName, email, phone, city, eventTypes, plan, password } = req.body;
+    const { name, email, phone, city, eventTypes, plan, password } = req.body;
+    const businessName = req.body.businessName || name; // fallback to name if empty
 
-    const exists = await Planner.findOne({ email });
-    if (exists) return res.status(400).json({ error: 'Email pehle se registered hai' });
+    // Check if already registered
+    const existsPlanner = await Planner.findOne({ email });
+    if (existsPlanner) return res.status(400).json({ error: 'Yeh email pehle se registered hai. Login karein.' });
+    const existsUser = await User.findOne({ email });
+    if (existsUser) return res.status(400).json({ error: 'Yeh email already use ho rahi hai.' });
 
     // Pehle user account banao
     const hashed = await bcrypt.hash(password, 10);
@@ -307,6 +311,45 @@ app.patch('/api/admin/planners/:id', authMiddleware, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Access nahi hai' });
   const planner = await Planner.findByIdAndUpdate(req.params.id, req.body, { new: true });
   res.json(planner);
+});
+
+
+// Update Planner profile
+app.put('/api/planners/:id', authMiddleware, async (req, res) => {
+  try {
+    const { businessName, city, eventTypes, phone, description } = req.body;
+    const updated = await Planner.findByIdAndUpdate(
+      req.params.id,
+      { businessName, city, phone, description,
+        eventTypes: typeof eventTypes === 'string' ? eventTypes.split(',').map(e=>e.trim()) : eventTypes },
+      { new: true }
+    );
+    if (!updated) return res.status(404).json({ error: 'Planner nahi mila' });
+    res.json({ message: 'Profile update ho gaya!', planner: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// /api/users/login alias (frontend compatibility)
+app.post('/api/users/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ error: 'Email nahi mila' });
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(400).json({ error: 'Password galat hai' });
+    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '30d' });
+    // Get planner info if role is planner
+    let plannerInfo = {};
+    if (user.role === 'planner') {
+      const planner = await Planner.findOne({ userId: user._id });
+      if (planner) plannerInfo = { plannerId: planner._id, plan: planner.plan, biz: planner.businessName, city: planner.city };
+    }
+    res.json({ message: 'Login ho gaya!', token, name: user.name, email, role: user.role, ...plannerInfo });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Health check
